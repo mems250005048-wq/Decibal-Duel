@@ -1,60 +1,183 @@
-# Conditional GAN for Audio Synthesis 🎶
+# 🎧 Conditional GAN for Audio Generation (CGAN) — README
 
-This repository contains the code for **Task 2: A deep learning-based generative model for audio synthesis**. The project implements a Conditional Generative Adversarial Network (CGAN) using PyTorch and `torchaudio` to generate realistic, category-specific audio clips. The model is trained on log-mel spectrograms and can produce novel audio samples for any of the predefined categories it was trained on.
+This repository contains a full **Conditional GAN (CGAN)** pipeline that trains a model to generate audio samples from labeled environmental sound categories (e.g., dog bark, siren, drilling). The workflow includes automatic ZIP extraction, dataset discovery, preprocessing, model training, and audio reconstruction.
 
-This implementation is designed to be run in a Google Colab environment, leveraging its free GPU resources for efficient training.
+---
+
+## 📁 Project Overview
+
+This project trains a **Conditional GAN** on log-mel spectrograms derived from `.wav` audio files. The generator learns to synthesize mel‑spectrograms conditioned on a chosen category, and the discriminator distinguishes real vs. fake mel-specs using spectral normalization.
+
+Audio is reconstructed using **InverseMelScale** + **Griffin-Lim**.
+
+---
 
 ## 🚀 Features
 
-* **Conditional Generation**: The GAN generates audio conditioned on a specific class label, allowing for targeted audio synthesis.
-* **Spectrogram-Based**: The model operates in the frequency domain by generating log-mel spectrograms, a robust representation for audio data.
-* **End-to-End Training**: The provided script (`gan_audio.py`) handles everything from data loading and preprocessing to model training and sample generation.
-* **Sample Generation**: At the end of each epoch, the model saves generated audio samples (`.wav`) and plots of their corresponding spectrograms.
-* **Google Colab Ready**: Includes necessary setup for mounting Google Drive to access datasets.
+* Automatic ZIP extraction from Google Drive
+* Auto-detection of category folder structure
+* Dataset mean/std computation for normalization
+* Log‑mel spectrogram generator & discriminator (CGAN)
+* Griffin-Lim phase reconstruction
+* Audio saving & playback directly in Colab
+* Training loop using **LSGAN loss**
+* Fixed runtime error using `.reshape(-1)` instead of `.view(-1)`
 
 ---
 
-## 🏗️ Model Architecture
+## 📦 Folder Requirements
 
-The project consists of two main neural network components, following the standard GAN architecture.
+Your extracted ZIP must contain category folders such as:
 
-### 1. Generator (The Forger 🎨)
-The `CGAN_Generator` takes a random noise vector (from the latent space) and a one-hot encoded class label as input. It then uses a series of `ConvTranspose2d` layers to upsample this input into a full-sized log-mel spectrogram ($128 \times 512$ dimensions) that mimics a real audio sample of the specified category.
+```
+root_dir/
+  ├── dog_bark/
+  ├── drilling/
+  ├── engine_idling/
+  ├── siren/
+  └── street_music/
+```
 
-### 2. Discriminator (The Detective 🕵️)
-The `CGAN_Discriminator` takes a log-mel spectrogram and a one-hot encoded class label as input. It concatenates the spectrogram with a learned embedding of the label. Then, it uses a series of `Conv2d` layers to downsample the input and outputs a single value (logit) indicating whether the spectrogram is real or fake *for that particular class*.
+Each folder must contain `.wav` files.
 
 ---
 
-## 🔧 Setup and Installation
+## 🔧 Installation
 
-### Prerequisites
-* A Google Account (for Google Colab and Google Drive).
-* Your audio dataset organized by category.
-
-### 1. Dataset Structure
-Before running the script, you must organize your audio files (`.wav`) into a specific directory structure on your Google Drive. The script expects a root folder containing subfolders for each audio category.
-
-For example, if your base path is `drive/MyDrive/organized_dataset/`, your training data should be structured as follows:
-
-```
-drive/MyDrive/organized_dataset/
-└── train/
-    ├── category_1/
-    │   ├── audio_001.wav
-    │   ├── audio_002.wav
-    │   └── ...
-    ├── category_2/
-    │   ├── sound_A.wav
-    │   ├── sound_B.wav
-    │   └── ...
-    └── category_3/
-        ├── sample_x.wav
-        ├── sample_y.wav
-        └── ...
+```bash
+pip install torch torchaudio tqdm matplotlib
 ```
 
+Google Colab will run this automatically.
 
-## 📜 License
+---
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+## 📥 ZIP Extraction
+
+The code extracts your dataset from Google Drive:
+
+```python
+ZIP_PATH = "/content/drive/MyDrive/the-frequency-quest.zip"
+EXTRACT_ROOT = "/content/data"
+```
+
+Make sure your ZIP is correctly located in your Drive.
+
+---
+
+## 🧠 Dataset Class
+
+The dataset:
+
+* Loads audio
+* Converts stereo → mono
+* Computes log‑mel spectrograms
+* Normalizes using dataset mean/std
+* Uses `.reshape(-1)` to prevent PyTorch runtime errors
+
+---
+
+## 🏗 Model Architecture
+
+### **Generator**
+
+Takes:
+
+* Random noise `z` (latent vector)
+* One‑hot label vector
+
+Outputs a **1×128×512** mel-spectrogram.
+
+### **Discriminator**
+
+Receives:
+
+* Mel-spectrogram
+* Label embedding reshaped into a spatial map
+
+Uses **spectral normalization** for training stability.
+
+---
+
+## 🎹 Audio Reconstruction
+
+Mel spectrogram → Reconstructed waveform using:
+
+* `InverseMelScale`
+* `GriffinLim (n_iter=64)` for better audio clarity
+
+Generated audio is saved as:
+
+```
+gan_generated_audio/<category>_ep<epoch>.wav
+```
+
+---
+
+## 🎯 Training
+
+Training uses **Least Squares GAN (LSGAN)** to stabilize convergence.
+
+Key hyperparameters:
+
+```
+LATENT_DIM = 100
+EPOCHS = 300
+BATCH_SIZE = 32
+LR = 2e-4
+```
+
+After every 10 epochs, sample audio for the first 3 categories.
+
+---
+
+## 🧪 Inference Example
+
+To generate audio for category index 0:
+
+```python
+wav = generate_audio_gan(G, 0, DEVICE, train_dataset.mean, train_dataset.std)
+save_and_play(wav, 22050, "example.wav")
+```
+
+---
+
+## 🛠 Troubleshooting
+
+### ❗ Dataset not found
+
+Check the extracted folder structure and ensure category names match:
+
+```python
+train_categories = ['dog_bark', 'drilling', 'engine_idling', 'siren', 'street_music']
+```
+
+### ❗ Empty dataset
+
+Ensure your category folders contain `.wav` files.
+
+### ❗ Griffin-Lim slow or noisy
+
+Decrease `n_iter`, but audio quality will drop.
+
+---
+
+## 📌 Notes
+
+* Modify category names to match your dataset.
+* Adjust `max_frames` depending on your audio duration.
+* Increase epochs for more realistic audio.
+* Works best with clean audio datasets.
+
+---
+
+## 📄 License
+
+MIT License. Feel free to modify and build on this! 😊
+
+---
+
+## 🙌 Credits
+
+Developed for training CGANs on environmental sound datasets in Google Colab.
+
